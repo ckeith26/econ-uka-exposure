@@ -364,16 +364,6 @@ See `docs/UKA.pdf` for details on the UKA nutrition program.
 ### WHO Growth Standards
 BMI-for-age z-scores based on WHO Child Growth Standards (2006).
 
-## Citation
-
-If you use or adapt this analysis, please cite:
-
-```
-Keith, C., Wolfson, J., Wu, A., & Dong, J. (2025). 
-UKA Nutrition Program Impact Analysis: Measuring the Causal Effect of Program Exposure on Child BMI.
-Dartmouth College Econ 20 Final Project.
-```
-
 ## License
 
 This project is for academic purposes only. Data files are anonymized for privacy protection.
