@@ -356,11 +356,6 @@ Potential directions for further analysis:
 ### Program Background
 See `docs/UKA.pdf` for details on the UKA nutrition program.
 
-### Econometric Methods
-- Angrist, J. D., & Pischke, J. S. (2009). *Mostly Harmless Econometrics*. Princeton University Press.
-  - Chapter 3: Selection on Observables
-- Frisch-Waugh-Lovell Theorem: Demonstrates equivalence of partial regression coefficients
-
 ### WHO Growth Standards
 BMI-for-age z-scores based on WHO Child Growth Standards (2006).
 
