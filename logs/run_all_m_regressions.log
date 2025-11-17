@@ -1,0 +1,1656 @@
+-----------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/cameronkeith/Desktop/Econ/Econ 20/econ-uka-exposure/logs/run_al
+> l_m_regressions.log
+  log type:  text
+ opened on:  17 Nov 2025, 18:17:53
+
+. 
+. * Create main results directory
+. capture mkdir "`basepath'/results"
+
+. 
+. display _newline(3)
+
+
+
+
+
+. display as result "{hline 80}"
+--------------------------------------------------------------------------------
+
+. display as result "UKA EXPOSURE ANALYSIS: 3-36 MONTHS"
+UKA EXPOSURE ANALYSIS: 3-36 MONTHS
+
+. display as result "Starting analysis at: $S_TIME on $S_DATE"
+Starting analysis at: 18:17:53 on 17 Nov 2025
+
+. display as result "{hline 80}"
+--------------------------------------------------------------------------------
+
+. display _newline(2)
+
+
+
+
+. 
+. * ============================================================================
+. * MAIN LOOP: Run analysis for each exposure horizon (3-36 months)
+. * ============================================================================
+. 
+. forvalues t = 3(1)36 {
+  2.     
+.     display _newline(3)
+  3.     display as result "{hline 80}"
+  4.     display as result "PROCESSING EXPOSURE HORIZON: `t' MONTHS"
+  5.     display as result "{hline 80}"
+  6.     display _newline(1)
+  7.     
+.     * Create output directory for this exposure level
+.     capture mkdir "`basepath'/results/exp_`t'm"
+  8.     
+.     * Load fresh data for this iteration
+.     use "`basepath'/data/uka_exposure_dataset.dta", clear
+  9.     
+.     * Check if sample exists for this exposure level
+.     quietly count if sample_`t' == 1
+ 10.     if r(N) == 0 {
+ 11.         display as error "No observations for `t'-month exposure. Skipping..."
+ 12.         continue
+ 13.     }
+ 14.     
+.     display as text "Sample size for `t'-month exposure: " as result r(N)
+ 15.     local N_obs = r(N)
+ 16.     
+.     * Restrict to sample
+.     keep if sample_`t'
+ 17.     
+.     * ------------------------------------------------------------------------
+.     * Run OVB Sensitivity Analysis
+.     * ------------------------------------------------------------------------
+.     
+.     display as text "Running OVB sensitivity regressions..."
+ 18.     
+.     * (1) Treatment + Age FE only (baseline specification)
+.     quietly eststo m1: reg p_imc treatment_`t' ///
+>         i.rounded_edad_meses
+ 19.     local coef_1 = _b[treatment_`t']
+ 20.     local se_1 = _se[treatment_`t']
+ 21.     
+.     * (2) Add baseline health controls
+.     quietly eststo m2: reg p_imc treatment_`t' ///
+>         bmi_baseline anemia_baseline male ///
+>         i.rounded_edad_meses
+ 22.     local coef_2 = _b[treatment_`t']
+ 23.     local se_2 = _se[treatment_`t']
+ 24.     
+.     * (3) Add SES controls
+.     quietly eststo m3: reg p_imc treatment_`t' ///
+>         bmi_baseline anemia_baseline male ///
+>         `sesvars' ///
+>         i.rounded_edad_meses
+ 25.     local coef_3 = _b[treatment_`t']
+ 26.     local se_3 = _se[treatment_`t']
+ 27.     
+.     * (4) Add grupo fixed effects
+.     quietly eststo m4: reg p_imc treatment_`t' ///
+>         bmi_baseline anemia_baseline male ///
+>         `sesvars' ///
+>         i.rounded_edad_meses ///
+>         i.grupo_fe
+ 28.     local coef_4 = _b[treatment_`t']
+ 29.     local se_4 = _se[treatment_`t']
+ 30.     
+.     * (5) Full specification: add calendar fixed effects
+.     quietly eststo m5: reg p_imc treatment_`t' ///
+>         bmi_baseline anemia_baseline male ///
+>         `sesvars' ///
+>         i.rounded_edad_meses ///
+>         i.grupo_fe ///
+>         i.calendar_fe
+ 31.     local coef_5 = _b[treatment_`t']
+ 32.     local se_5 = _se[treatment_`t']
+ 33.     
+.     * Display results summary
+.     display _newline(1)
+ 34.     display as text "Coefficients for `t'-month exposure:"
+ 35.     display as text "  (1) Age FE:        " as result %6.3f `coef_1' as text "
+>  (SE = " as result %6.3f `se_1' as text ")"
+ 36.     display as text "  (2) + Health:      " as result %6.3f `coef_2' as text "
+>  (SE = " as result %6.3f `se_2' as text ")"
+ 37.     display as text "  (3) + SES:         " as result %6.3f `coef_3' as text "
+>  (SE = " as result %6.3f `se_3' as text ")"
+ 38.     display as text "  (4) + Grupo FE:    " as result %6.3f `coef_4' as text "
+>  (SE = " as result %6.3f `se_4' as text ")"
+ 39.     display as text "  (5) Full:          " as result %6.3f `coef_5' as text "
+>  (SE = " as result %6.3f `se_5' as text ")"
+ 40.     
+.     * ------------------------------------------------------------------------
+.     * Export regression tables in multiple formats
+.     * ------------------------------------------------------------------------
+.     
+.     display as text "Exporting regression tables..."
+ 41.     
+.     * CSV format
+.     quietly esttab m1 m2 m3 m4 m5 using "`basepath'/results/exp_`t'm/ovb_analysis
+> _`t'm.csv", ///
+>         b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+>         keep(treatment_`t') ///
+>         scalars(N r2) ///
+>         title("OVB Sensitivity Analysis: `t'-Month Treatment Effect") ///
+>         mtitles("Age FE" "Health" "SES" "Grupo FE" "Full") ///
+>         replace
+ 42.     
+.     * LaTeX format
+.     quietly esttab m1 m2 m3 m4 m5 using "`basepath'/results/exp_`t'm/ovb_analysis
+> _`t'm.tex", ///
+>         b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+>         keep(treatment_`t') ///
+>         scalars(N r2) ///
+>         title("OVB Sensitivity Analysis: `t'-Month Treatment Effect") ///
+>         mtitles("Age FE" "Health" "SES" "Grupo FE" "Full") ///
+>         booktabs ///
+>         replace
+ 43.     
+.     * HTML format
+.     quietly esttab m1 m2 m3 m4 m5 using "`basepath'/results/exp_`t'm/ovb_analysis
+> _`t'm.html", ///
+>         b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+>         keep(treatment_`t') ///
+>         scalars(N r2) ///
+>         title("OVB Sensitivity Analysis: `t'-Month Treatment Effect") ///
+>         mtitles("Age FE" "Health" "SES" "Grupo FE" "Full") ///
+>         replace
+ 44.     
+.     * Plain text format
+.     quietly esttab m1 m2 m3 m4 m5 using "`basepath'/results/exp_`t'm/ovb_analysis
+> _`t'm.txt", ///
+>         b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+>         keep(treatment_`t') ///
+>         scalars(N r2) ///
+>         title("OVB Sensitivity Analysis: `t'-Month Treatment Effect") ///
+>         mtitles("Age FE" "Health" "SES" "Grupo FE" "Full") ///
+>         replace
+ 45.     
+.     * Rich Text Format
+.     quietly esttab m1 m2 m3 m4 m5 using "`basepath'/results/exp_`t'm/ovb_analysis
+> _`t'm.rtf", ///
+>         b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+>         keep(treatment_`t') ///
+>         scalars(N r2) ///
+>         title("OVB Sensitivity Analysis: `t'-Month Treatment Effect") ///
+>         mtitles("Age FE" "Health" "SES" "Grupo FE" "Full") ///
+>         replace
+ 46.     
+.     * ------------------------------------------------------------------------
+.     * Create formatted table
+.     * ------------------------------------------------------------------------
+.     
+.     preserve
+ 47.     clear
+ 48.     set obs 7
+ 49.     
+.     gen str30 row_label = ""
+ 50.     gen str20 spec1 = ""
+ 51.     gen str20 spec2 = ""
+ 52.     gen str20 spec3 = ""
+ 53.     gen str20 spec4 = ""
+ 54.     gen str20 spec5 = ""
+ 55.     
+.     * Header row
+.     replace row_label = "Variable" in 1
+ 56.     replace spec1 = "(1)" in 1
+ 57.     replace spec2 = "(2)" in 1
+ 58.     replace spec3 = "(3)" in 1
+ 59.     replace spec4 = "(4)" in 1
+ 60.     replace spec5 = "(5)" in 1
+ 61.     
+.     * Specification labels row
+.     replace row_label = "" in 2
+ 62.     replace spec1 = "Age FE" in 2
+ 63.     replace spec2 = "Health" in 2
+ 64.     replace spec3 = "SES" in 2
+ 65.     replace spec4 = "Grupo FE" in 2
+ 66.     replace spec5 = "Full" in 2
+ 67.     
+.     * Treatment coefficient row
+.     replace row_label = "Treatment (`t'm)" in 3
+ 68.     replace spec1 = string(`coef_1', "%6.3f") in 3
+ 69.     replace spec2 = string(`coef_2', "%6.3f") in 3
+ 70.     replace spec3 = string(`coef_3', "%6.3f") in 3
+ 71.     replace spec4 = string(`coef_4', "%6.3f") in 3
+ 72.     replace spec5 = string(`coef_5', "%6.3f") in 3
+ 73.     
+.     * Standard error row
+.     replace row_label = "" in 4
+ 74.     replace spec1 = "(" + string(`se_1', "%6.3f") + ")" in 4
+ 75.     replace spec2 = "(" + string(`se_2', "%6.3f") + ")" in 4
+ 76.     replace spec3 = "(" + string(`se_3', "%6.3f") + ")" in 4
+ 77.     replace spec4 = "(" + string(`se_4', "%6.3f") + ")" in 4
+ 78.     replace spec5 = "(" + string(`se_5', "%6.3f") + ")" in 4
+ 79.     
+.     * Blank row
+.     replace row_label = "" in 5
+ 80.     
+.     * Observations row
+.     replace row_label = "Observations" in 6
+ 81.     replace spec1 = string(`N_obs') in 6
+ 82.     replace spec2 = string(`N_obs') in 6
+ 83.     replace spec3 = string(`N_obs') in 6
+ 84.     replace spec4 = string(`N_obs') in 6
+ 85.     replace spec5 = string(`N_obs') in 6
+ 86.     
+.     * R-squared row
+.     replace row_label = "R-squared" in 7
+ 87.     quietly: estimates restore m1
+ 88.     replace spec1 = string(`e(r2)', "%5.3f") in 7
+ 89.     quietly: estimates restore m2
+ 90.     replace spec2 = string(`e(r2)', "%5.3f") in 7
+ 91.     quietly: estimates restore m3
+ 92.     replace spec3 = string(`e(r2)', "%5.3f") in 7
+ 93.     quietly: estimates restore m4
+ 94.     replace spec4 = string(`e(r2)', "%5.3f") in 7
+ 95.     quietly: estimates restore m5
+ 96.     replace spec5 = string(`e(r2)', "%5.3f") in 7
+ 97.     
+.     * Export formatted table
+.     quietly outfile row_label spec1 spec2 spec3 spec4 spec5 using "`basepath'/res
+> ults/exp_`t'm/ovb_table_formatted.txt", ///
+>         replace wide noquote
+ 98.     
+.     restore
+ 99.     
+.     * Clear stored estimates
+.     eststo clear
+100.     
+.     * ------------------------------------------------------------------------
+.     * GRAPH 1: OVB Coefficient Plot
+.     * ------------------------------------------------------------------------
+.     
+.     display as text "Creating graphs..."
+101.     
+.     preserve
+102.     clear
+103.     set obs 5
+104.     gen spec = _n
+105.     gen coef = .
+106.     gen se = .
+107.     gen ci_lower = .
+108.     gen ci_upper = .
+109.     
+.     replace coef = `coef_1' if spec == 1
+110.     replace se = `se_1' if spec == 1
+111.     
+.     replace coef = `coef_2' if spec == 2
+112.     replace se = `se_2' if spec == 2
+113.     
+.     replace coef = `coef_3' if spec == 3
+114.     replace se = `se_3' if spec == 3
+115.     
+.     replace coef = `coef_4' if spec == 4
+116.     replace se = `se_4' if spec == 4
+117.     
+.     replace coef = `coef_5' if spec == 5
+118.     replace se = `se_5' if spec == 5
+119.     
+.     * Calculate confidence intervals
+.     replace ci_lower = coef - 1.96*se
+120.     replace ci_upper = coef + 1.96*se
+121.     
+.     * Create coefficient plot
+.     quietly twoway ///
+>         (rcap ci_lower ci_upper spec, lcolor(navy)) ///
+>         (scatter coef spec, mcolor(navy) msize(medium)), ///
+>         xlabel(1 "Age FE" 2 "Health" 3 "SES" 4 "Grupo FE" 5 "Full", angle(45)) //
+> /
+>         xtitle("Specification") ///
+>         ytitle("Treatment Effect (BMI z-score)") ///
+>         title("OVB Sensitivity: `t'-Month Exposure Effect") ///
+>         subtitle("(All specifications include age fixed effects)") ///
+>         legend(off) ///
+>         yline(0, lpattern(dash) lcolor(red)) ///
+>         note("Note: Bars show 95% confidence intervals. All models control for ag
+> e (matching variable).")
+122.     
+.     quietly graph export "`basepath'/results/exp_`t'm/ovb_coefplot_`t'm.png", rep
+> lace width(2400)
+123.     
+.     restore
+124.     
+.     * ------------------------------------------------------------------------
+.     * Reload data for remaining graphs
+.     * ------------------------------------------------------------------------
+.     
+.     use "`basepath'/data/uka_exposure_dataset.dta", clear
+125.     keep if sample_`t'
+126.     
+.     * ------------------------------------------------------------------------
+.     * GRAPH 2: Baseline Plot (Age FE Only)
+.     * ------------------------------------------------------------------------
+.     
+.     quietly twoway ///
+>         (scatter p_imc treatment_`t', msymbol(o) msize(vsmall) mcolor(navy%30) ji
+> tter(2)) ///
+>         (lfit p_imc treatment_`t', lcolor(red) lwidth(medium)), ///
+>         xtitle("Treatment (`t' months exposure)") ///
+>         ytitle("BMI-for-age z-score") ///
+>         title("Baseline: Controlling for age only (`t' months)") ///
+>         legend(off) ///
+>         note("Coefficient: {&beta} = `=string(`coef_1', "%6.3f")' (SE = `=string(
+> `se_1', "%6.3f")') | Controls: Age FE")
+127.     
+.     quietly graph export "`basepath'/results/exp_`t'm/baseline_plot_`t'm.png", re
+> place
+128.     
+.     * ------------------------------------------------------------------------
+.     * Create residuals for FWL plots
+.     * ------------------------------------------------------------------------
+.     
+.     * Residualize p_imc on all controls + FE (excluding treatment)
+.     quietly reg p_imc ///
+>         bmi_baseline anemia_baseline male ///
+>         `sesvars' ///
+>         i.rounded_edad_meses ///
+>         i.grupo_fe ///
+>         i.calendar_fe
+129.     capture drop y_resid
+130.     quietly predict double y_resid, resid
+131.     
+.     * Residualize treatment on the same controls + FE
+.     quietly reg treatment_`t' ///
+>         bmi_baseline anemia_baseline male ///
+>         `sesvars' ///
+>         i.rounded_edad_meses ///
+>         i.grupo_fe ///
+>         i.calendar_fe
+132.     capture drop t_resid
+133.     quietly predict double t_resid, resid
+134.     
+.     * Verify FWL gives same coefficient
+.     quietly reg y_resid t_resid
+135.     local beta_fwl = _b[t_resid]
+136.     
+.     * ------------------------------------------------------------------------
+.     * GRAPH 3: FWL Plot (Full Specification)
+.     * ------------------------------------------------------------------------
+.     
+.     quietly twoway ///
+>         (scatter y_resid t_resid, msymbol(o) msize(vsmall) mcolor(navy%30) jitter
+> (2)) ///
+>         (lfit y_resid t_resid, lcolor(red) lwidth(medium)), ///
+>         xtitle("Residualized treatment (`t' months of exposure)") ///
+>         ytitle("Residualized BMI-for-age z-score") ///
+>         title("Full specification: `t' months exposure") ///
+>         legend(off) ///
+>         note("Coefficient: {&beta} = `=string(`coef_5', "%6.3f")' (SE = `=string(
+> `se_5', "%6.3f")') | Full controls")
+137.     
+.     quietly graph export "`basepath'/results/exp_`t'm/fwl_plot_`t'm.png", replace
+138.     
+.     * ------------------------------------------------------------------------
+.     * GRAPH 4: OVB Comparison (Baseline vs Full)
+.     * ------------------------------------------------------------------------
+.     
+.     * Panel A: Baseline (Age FE only)
+.     quietly twoway ///
+>         (scatter p_imc treatment_`t', msymbol(o) msize(vsmall) mcolor(navy%30) ji
+> tter(2)) ///
+>         (lfit p_imc treatment_`t', lcolor(red) lwidth(medium)), ///
+>         xtitle("Treatment") ///
+>         ytitle("BMI z-score") ///
+>         title("(A) Age FE: {&beta} = `=string(`coef_1', "%5.3f")'", size(medium))
+>  ///
+>         legend(off) ///
+>         name(baseline_`t', replace)
+139.     
+.     * Panel B: Full specification (FWL)
+.     quietly twoway ///
+>         (scatter y_resid t_resid, msymbol(o) msize(vsmall) mcolor(navy%30) jitter
+> (2)) ///
+>         (lfit y_resid t_resid, lcolor(red) lwidth(medium)), ///
+>         xtitle("Residualized treatment") ///
+>         ytitle("Residualized BMI z-score") ///
+>         title("(B) Full: {&beta} = `=string(`coef_5', "%5.3f")'", size(medium)) /
+> //
+>         legend(off) ///
+>         name(fwl_`t', replace)
+140.     
+.     * Combine panels
+.     quietly graph combine baseline_`t' fwl_`t', ///
+>         rows(1) ///
+>         title("OVB Analysis: `t' Months Exposure") ///
+>         note("Note: Panel A controls for age only. Panel B adds health, SES, grup
+> o FE, and calendar FE.")
+141.     
+.     quietly graph export "`basepath'/results/exp_`t'm/ovb_comparison_`t'm.png", r
+> eplace width(3000)
+142.     
+.     * Clean up graph names
+.     quietly graph drop baseline_`t' fwl_`t'
+143.     
+.     * ------------------------------------------------------------------------
+.     * GRAPH 5: FWL Theorem Demonstration
+.     * ------------------------------------------------------------------------
+.     
+.     * Store full regression coefficient and CI
+.     local beta_full = `coef_5'
+144.     local se_full = `se_5'
+145.     local ci_lower = `beta_full' - 1.96*`se_full'
+146.     local ci_upper = `beta_full' + 1.96*`se_full'
+147.     
+.     * Panel A: Full regression coefficient
+.     preserve
+148.     clear
+149.     set obs 1
+150.     gen spec = 1
+151.     gen coef = `beta_full'
+152.     gen ci_lower_plot = `ci_lower'
+153.     gen ci_upper_plot = `ci_upper'
+154.     
+.     quietly twoway ///
+>         (rcap ci_lower_plot ci_upper_plot spec, lcolor(navy) lwidth(thick)) ///
+>         (scatter coef spec, mcolor(navy) msize(large)), ///
+>         xlabel(none) ///
+>         xtitle("") ///
+>         ytitle("Treatment Effect (BMI z-score)") ///
+>         title("(A) Full Regression Coefficient", size(medium)) ///
+>         subtitle("β = `=string(`beta_full', "%6.3f")'") ///
+>         legend(off) ///
+>         yline(0, lpattern(dash) lcolor(red)) ///
+>         xscale(range(0.5 1.5)) ///
+>         note("Coefficient from full regression with all controls") ///
+>         name(full_reg_`t', replace)
+155.     
+.     restore
+156.     
+.     * Panel B: FWL scatter plot
+.     quietly twoway ///
+>         (scatter y_resid t_resid, msymbol(o) msize(vsmall) mcolor(navy%30) jitter
+> (2)) ///
+>         (lfit y_resid t_resid, lcolor(red) lwidth(medium)), ///
+>         xtitle("Residualized treatment") ///
+>         ytitle("Residualized BMI z-score") ///
+>         title("(B) FWL: Same Coefficient", size(medium)) ///
+>         subtitle("β = `=string(`beta_fwl', "%6.3f")'") ///
+>         legend(off) ///
+>         note("Frisch-Waugh-Lovell: Slope of residuals plot") ///
+>         name(fwl_demo_`t', replace)
+157.     
+.     * Combine to show equivalence
+.     quietly graph combine full_reg_`t' fwl_demo_`t', ///
+>         rows(1) ///
+>         title("FWL Theorem Demonstration: `t' Months") ///
+>         note("Note: Both panels show β = `=string(`beta_full', "%6.3f")'. " ///
+>              "Panel A: Coefficient from full regression. Panel B: Slope from FWL 
+> residuals.")
+158.     
+.     quietly graph export "`basepath'/results/exp_`t'm/fwl_demonstration_`t'm.png"
+> , replace width(3000)
+159.     
+.     * Clean up
+.     quietly graph drop full_reg_`t' fwl_demo_`t'
+160.     
+.     * ------------------------------------------------------------------------
+.     * Display OVB summary
+.     * ------------------------------------------------------------------------
+.     
+.     local total_bias = `coef_1' - `coef_5'
+161.     local pct_bias = (`total_bias'/`coef_1') * 100
+162.     
+.     display _newline(1)
+163.     display as text "OVB Analysis for `t'-month exposure:"
+164.     display as text "  Total bias:        " as result %6.3f `total_bias'
+165.     display as text "  Percent bias:      " as result %6.1f `pct_bias' "%"
+166.     display as text "  FWL verification:  " as result %9.6f (`beta_full' - `be
+> ta_fwl')
+167.     
+.     display as result "{hline 80}"
+168.     display as text "Completed `t'-month analysis"
+169.     display as result "{hline 80}"
+170.     
+. } // End of main loop
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 3 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 3-month exposure: 360
+(626 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 3-month exposure:
+  (1) Age FE:         0.085 (SE =  0.142)
+  (2) + Health:       0.083 (SE =  0.077)
+  (3) + SES:          0.083 (SE =  0.077)
+  (4) + Grupo FE:    -0.075 (SE =  0.142)
+  (5) Full:          -0.321 (SE =  0.819)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(626 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 3-month exposure:
+  Total bias:         0.407
+  Percent bias:       476.1%
+  FWL verification:  -0.000000
+--------------------------------------------------------------------------------
+Completed 3-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 4 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 4-month exposure: 370
+(616 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 4-month exposure:
+  (1) Age FE:         0.123 (SE =  0.141)
+  (2) + Health:       0.040 (SE =  0.084)
+  (3) + SES:          0.040 (SE =  0.084)
+  (4) + Grupo FE:    -0.252 (SE =  0.175)
+  (5) Full:          -0.919 (SE =  0.575)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(616 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 4-month exposure:
+  Total bias:         1.042
+  Percent bias:       849.2%
+  FWL verification:   0.000000
+--------------------------------------------------------------------------------
+Completed 4-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 5 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 5-month exposure: 378
+(608 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 5-month exposure:
+  (1) Age FE:         0.143 (SE =  0.154)
+  (2) + Health:       0.075 (SE =  0.114)
+  (3) + SES:          0.075 (SE =  0.114)
+  (4) + Grupo FE:    -0.215 (SE =  0.346)
+  (5) Full:           2.015 (SE =  1.341)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(608 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 5-month exposure:
+  Total bias:        -1.872
+  Percent bias:      -1311.8%
+  FWL verification:  -0.000000
+--------------------------------------------------------------------------------
+Completed 5-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 6 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 6-month exposure: 378
+(608 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 6-month exposure:
+  (1) Age FE:         0.089 (SE =  0.154)
+  (2) + Health:      -0.031 (SE =  0.111)
+  (3) + SES:         -0.031 (SE =  0.111)
+  (4) + Grupo FE:    -0.448 (SE =  0.367)
+  (5) Full:          -0.883 (SE =  0.481)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(608 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 6-month exposure:
+  Total bias:         0.972
+  Percent bias:      1092.5%
+  FWL verification:  -0.882749
+--------------------------------------------------------------------------------
+Completed 6-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 7 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 7-month exposure: 368
+(618 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 7-month exposure:
+  (1) Age FE:         0.065 (SE =  0.161)
+  (2) + Health:      -0.049 (SE =  0.121)
+  (3) + SES:         -0.049 (SE =  0.121)
+  (4) + Grupo FE:    -0.644 (SE =  0.372)
+  (5) Full:          -0.158 (SE =  1.802)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(618 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 7-month exposure:
+  Total bias:         0.223
+  Percent bias:       344.5%
+  FWL verification:  -0.157938
+--------------------------------------------------------------------------------
+Completed 7-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 8 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 8-month exposure: 335
+(651 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 8-month exposure:
+  (1) Age FE:        -0.033 (SE =  0.187)
+  (2) + Health:      -0.154 (SE =  0.126)
+  (3) + SES:         -0.154 (SE =  0.126)
+  (4) + Grupo FE:    -0.834 (SE =  0.525)
+  (5) Full:           1.226 (SE =  1.717)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(651 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 8-month exposure:
+  Total bias:        -1.259
+  Percent bias:      3850.3%
+  FWL verification:   1.225942
+--------------------------------------------------------------------------------
+Completed 8-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 9 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 9-month exposure: 336
+(650 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 9-month exposure:
+  (1) Age FE:        -0.092 (SE =  0.201)
+  (2) + Health:      -0.151 (SE =  0.135)
+  (3) + SES:         -0.151 (SE =  0.135)
+  (4) + Grupo FE:    -0.171 (SE =  0.629)
+  (5) Full:          -0.671 (SE =  0.849)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(650 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 9-month exposure:
+  Total bias:         0.579
+  Percent bias:      -629.5%
+  FWL verification:  -0.671430
+--------------------------------------------------------------------------------
+Completed 9-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 10 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 10-month exposure: 350
+(636 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 10-month exposure:
+  (1) Age FE:        -0.132 (SE =  0.212)
+  (2) + Health:      -0.201 (SE =  0.140)
+  (3) + SES:         -0.201 (SE =  0.140)
+  (4) + Grupo FE:    -0.258 (SE =  0.540)
+  (5) Full:          -0.727 (SE =  0.729)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(636 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 10-month exposure:
+  Total bias:         0.595
+  Percent bias:      -449.2%
+  FWL verification:  -0.727100
+--------------------------------------------------------------------------------
+Completed 10-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 11 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 11-month exposure: 317
+(669 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 11-month exposure:
+  (1) Age FE:        -0.114 (SE =  0.233)
+  (2) + Health:      -0.215 (SE =  0.146)
+  (3) + SES:         -0.215 (SE =  0.146)
+  (4) + Grupo FE:     0.046 (SE =  0.747)
+  (5) Full:          -0.184 (SE =  0.889)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(669 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 11-month exposure:
+  Total bias:         0.069
+  Percent bias:       -60.8%
+  FWL verification:  -0.183727
+--------------------------------------------------------------------------------
+Completed 11-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 12 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 12-month exposure: 323
+(663 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 12-month exposure:
+  (1) Age FE:        -0.098 (SE =  0.247)
+  (2) + Health:      -0.192 (SE =  0.177)
+  (3) + SES:         -0.192 (SE =  0.177)
+  (4) + Grupo FE:    -0.415 (SE =  1.000)
+  (5) Full:          -0.288 (SE =  1.563)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(663 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 12-month exposure:
+  Total bias:         0.189
+  Percent bias:      -192.2%
+  FWL verification:  -0.287701
+--------------------------------------------------------------------------------
+Completed 12-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 13 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 13-month exposure: 313
+(673 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 13-month exposure:
+  (1) Age FE:        -0.227 (SE =  0.274)
+  (2) + Health:      -0.307 (SE =  0.195)
+  (3) + SES:         -0.307 (SE =  0.195)
+  (4) + Grupo FE:    -0.143 (SE =  1.066)
+  (5) Full:           1.300 (SE =  1.322)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+(673 observations deleted)
+Number of observations (_N) was 0, now 1.
+
+
+OVB Analysis for 13-month exposure:
+  Total bias:        -1.527
+  Percent bias:       673.7%
+  FWL verification:   1.300005
+--------------------------------------------------------------------------------
+Completed 13-month analysis
+--------------------------------------------------------------------------------
+
+
+
+
+--------------------------------------------------------------------------------
+PROCESSING EXPOSURE HORIZON: 14 MONTHS
+--------------------------------------------------------------------------------
+
+
+(UKA Exposure Dataset Creation - Created on 17 Nov 2025)
+Sample size for 14-month exposure: 323
+(663 observations deleted)
+Running OVB sensitivity regressions...
+
+
+Coefficients for 14-month exposure:
+  (1) Age FE:        -0.391 (SE =  0.299)
+  (2) + Health:      -0.395 (SE =  0.210)
+  (3) + SES:         -0.395 (SE =  0.210)
+  (4) + Grupo FE:    -0.779 (SE =  1.046)
+  (5) Full:          -0.302 (SE =  2.280)
+Exporting regression tables...
+Number of observations (_N) was 0, now 7.
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(7 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+Creating graphs...
+Number of observations (_N) was 0, now 5.
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(5 missing values generated)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(5 real changes made)
+(5 real changes made)
+not a class type
+not a class type
+not a class type
+not a class type
+not a class type

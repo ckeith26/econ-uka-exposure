@@ -1,0 +1,1427 @@
+-----------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/cameronkeith/Desktop/Econ/Econ 20/econ-uka-exposure/logs/create
+> _dataset.log
+  log type:  text
+ opened on:  17 Nov 2025, 18:19:34
+
+. 
+. * Try loading from working directory first
+. capture import excel using "panelUKA_fuzzymerge.xlsx", firstrow clear
+
+. 
+. * If that failed (_rc != 0), try from data subdirectory
+. if _rc != 0 {
+.     display as text "File not found in working directory, trying data/ folder..."
+File not found in working directory, trying data/ folder...
+.     import excel using "`basepath'/data/panelUKA_fuzzymerge.xlsx", firstrow clear
+(203 vars, 9,087 obs)
+. }
+
+. 
+. * 1. Basic cleaning and sample restrictions
+. 
+. drop borrado
+
+. drop Borrado
+
+. rename _all, lower
+
+. 
+. * Identify duplicates of (child, measurement date)
+. duplicates tag id_ninio peso_fsoma, gen(dup)
+
+Duplicates in terms of id_ninio peso_fsoma
+
+. 
+. * Drop duplicates (keep the first occurrence)
+. drop if dup
+(7,022 observations deleted)
+
+. 
+. * Clean up helper variable
+. drop dup
+
+. 
+. * Outcome: BMI-for-age z-score, drop missing and extreme outliers
+. drop if missing(p_imc) | p_imc < -5 | p_imc > 5
+(544 observations deleted)
+
+. 
+. * Need measurement date and birth date
+. drop if missing(peso_fsoma) | missing(fnac_ym)
+(0 observations deleted)
+
+. 
+. 
+. * 2. Date variables and age calculation
+. * Convert measurement date string to Stata date
+. gen double date_meas = date(peso_fsoma, "DM20Y")
+
+. format date_meas %td
+
+. 
+. * Convert birth year-month to monthly date
+. gen date_birth_m = monthly(fnac_ym, "YM")
+
+. format date_birth_m %tm
+
+. 
+. * Measurement month
+. gen meas_m = mofd(date_meas)
+
+. format meas_m %tm
+
+. 
+. * Clean age in months at measurement
+. gen edad_meses = peso_edad
+
+. label var edad_meses "Age in months at measurement"
+
+. 
+. * Rounded age in months
+. gen rounded_edad_meses = round(edad_meses)
+
+. label var rounded_edad_meses "Age in months (rounded)"
+
+. 
+. * Calendar time variable for fixed effects
+. gen calendar_ym = meas_m
+
+. format calendar_ym %tm
+
+. label var calendar_ym "Calendar year-month of measurement"
+
+. 
+. 
+. 
+. * 3. Core controls: sex, baseline health
+. 
+. * Child sex (dummy)
+. gen byte male = (sexonum == 2) if !missing(sexonum)
+
+. label var male "Male child"
+
+. 
+. * Baseline BMI (first panel BMI z-score, pre-exposure)
+. gen bmi_baseline = p_imc_ini
+(19 missing values generated)
+
+. label var bmi_baseline "Baseline BMI-for-age z-score (initial panel measurement)"
+
+. 
+. * Baseline anemia (1 = anemic at baseline, 0 = not anemic)
+. gen byte anemia_baseline = .
+(1,521 missing values generated)
+
+. replace anemia_baseline = 1 if hb_anemiadicot_ini == "ANEMICO"
+(704 real changes made)
+
+. replace anemia_baseline = 0 if hb_anemiadicot_ini != "ANEMICO" & !missing(hb_anem
+> iadicot_ini)
+(536 real changes made)
+
+. label var anemia_baseline "Baseline anemia status (1 = anemic)"
+
+. 
+. 
+. * 4. Socioeconomic status controls available in panelUKA_fuzzymerge
+. 
+. * Build a macro of SES variables that exist and are non-missing
+. local sesvars
+
+. 
+. * Weekly calorie intake
+. capture confirm variable total_calorias_semana
+
+. if !_rc {
+.     gen calories_weekly = total_calorias_semana
+.     label var calories_weekly "Weekly calorie intake"
+.     quietly count if !missing(calories_weekly)
+.     if r(N) > 0 local sesvars `sesvars' calories_weekly
+. }
+
+. 
+. * Weekly iron intake
+. capture confirm variable total_hierro_semana
+
+. if !_rc {
+.     gen iron_weekly = total_hierro_semana
+.     label var iron_weekly "Weekly iron intake (mg)"
+.     quietly count if !missing(iron_weekly)
+.     if r(N) > 0 local sesvars `sesvars' iron_weekly
+. }
+
+. 
+. * Weekly household spending on food (numeric SES proxy)
+. * Search for variable with label containing 'alimentación'
+. ds, has(varlabel "*alimenta*")
+delingreso~s
+
+. local foodvar `r(varlist)'
+
+. 
+. if "`foodvar'" != "" {
+.     di as result "Using food spending variable: `foodvar'"
+Using food spending variable: delingresofamiliarcuántogas
+. 
+.     gen food_spending = `foodvar'
+(26 missing values generated)
+.     label var food_spending "Weekly household food expenditure"
+. 
+.     quietly count if !missing(food_spending)
+.     if r(N) > 0 local sesvars `sesvars' food_spending
+. } 
+
+. else {
+.     di as error "Food spending variable not found — skipping."
+. }
+
+. 
+. 
+. * 5. Age controls and fixed effects
+. 
+. * Age polynomial
+. gen age         = edad_meses
+
+. gen age_squared = edad_meses^2
+
+. gen age_cubed   = edad_meses^3
+
+. label var age         "Age in months"
+
+. label var age_squared "Age squared"
+
+. label var age_cubed   "Age cubed"
+
+. 
+. * Calendar FE (year-month)
+. egen calendar_fe = group(calendar_ym)
+
+. label var calendar_fe "Calendar year-month FE"
+
+. 
+. * Municipio FE
+. egen municipio_fe = group(id_municipio)
+
+. label var municipio_fe "municipio FE"
+
+. 
+. * Locality FE
+. egen locality_fe = group(id_localidad)
+
+. label var locality_fe "Locality FE"
+
+. 
+. * Grupo FE
+. egen grupo_fe = group(id_grupo)
+
+. label var grupo_fe "grupo FE"
+
+. 
+. 
+. 
+. * 6. Program exposure variables
+. 
+. * Program start date in each community (earliest measurement date)
+. bys id_grupo: egen start_date_grupo = min(date_meas)
+
+. format start_date_grupo %td
+
+. gen start_m_grupo = mofd(start_date_grupo)
+
+. format start_m_grupo %tm
+
+. label var start_m_grupo "Program start month in grupo"
+
+. 
+. 
+. * Program start date in each locality (earliest measurement date)
+. bys id_localidad: egen start_date_locality = min(date_meas)
+
+. format start_date_locality %td
+
+. gen start_m_locality = mofd(start_date_locality)
+
+. format start_m_locality %tm
+
+. label var start_m_locality "Program start month in locality"
+
+. 
+. * Program start date in each municipio (earliest measurement date)
+. bys id_municipio: egen start_date_municipio = min(date_meas)
+
+. format start_date_municipio %td
+
+. gen start_m_municipio = mofd(start_date_municipio)
+
+. format start_m_municipio %tm
+
+. label var start_m_municipio "Program start month in municipio"
+
+. 
+. * Program start date in each estado (earliest measurement date)
+. // bys id_estado: egen start_date_estado = min(date_meas)
+. // format start_date_estado %td
+. // gen start_m_estado = mofd(start_date_estado)
+. // format start_m_estado %tm
+. // label var start_m_estado "Program start month in estado"
+. 
+. * Each child's first measurement date
+. bys id_ninio: egen first_meas_child = min(date_meas)
+
+. format first_meas_child %td
+
+. 
+. * Months of program exposure (time since program started in locality)
+. gen program_exposure = meas_m - start_m_locality
+
+. label var program_exposure "Months since program start in locality"
+
+. 
+. * Child enrolled at program start (within 30 days)
+. gen enrolled_at_start = (abs(first_meas_child - start_date_locality) <= 30)
+
+. label var enrolled_at_start "Child enrolled within 30 days of locality program st
+> art"
+
+. 
+. 
+. * 7. Define treatment and control groups
+. 
+. * Keep only early joiners
+. keep if enrolled_at_start == 1
+(535 observations deleted)
+
+. 
+. * Define eligibility windows (mask each measurement)
+. gen in_control_window = inrange(program_exposure, 0, 1)
+
+. 
+. * Distance to the target month within each window
+. gen dist_0  = abs(program_exposure) if in_control_window
+(766 missing values generated)
+
+. 
+. * For each child, pick the closest control obs (if any)
+. bysort id_ninio (dist_0 date_meas): ///
+>     gen best_control = in_control_window & dist_0 == dist_0[1]
+
+. 
+. ssc install estout, replace
+checking estout consistency and verifying not already installed...
+all files already exist and are up to date.
+
+. 
+. forvalues t = 3(1)36 {
+  2.     local lo = `t' - 1
+  3.     local hi = `t' + 1
+  4. 
+.     * Treated: ~t months exposure
+.     gen treat_`t'   = inrange(program_exposure, `lo', `hi')
+  5. 
+.     * Control: ~0 months exposure
+.     gen control_`t' = inrange(program_exposure, 0, 1)
+  6. 
+.     * Sample: either treated or control
+.     gen sample_`t'  = treat_`t' | control_`t'
+  7. 
+.     * Treatment indicator
+.     gen treatment_`t' = treat_`t'
+  8. 
+.     di "------ Horizon `t' months ------"
+  9.     tab treatment_`t' if sample_`t'
+ 10. }
+------ Horizon 3 months ------
+
+treatment_3 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       61.11       61.11
+          1 |        140       38.89      100.00
+------------+-----------------------------------
+      Total |        360      100.00
+------ Horizon 4 months ------
+
+treatment_4 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       59.46       59.46
+          1 |        150       40.54      100.00
+------------+-----------------------------------
+      Total |        370      100.00
+------ Horizon 5 months ------
+
+treatment_5 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       58.20       58.20
+          1 |        158       41.80      100.00
+------------+-----------------------------------
+      Total |        378      100.00
+------ Horizon 6 months ------
+
+treatment_6 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       58.20       58.20
+          1 |        158       41.80      100.00
+------------+-----------------------------------
+      Total |        378      100.00
+------ Horizon 7 months ------
+
+treatment_7 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       59.78       59.78
+          1 |        148       40.22      100.00
+------------+-----------------------------------
+      Total |        368      100.00
+------ Horizon 8 months ------
+
+treatment_8 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       65.67       65.67
+          1 |        115       34.33      100.00
+------------+-----------------------------------
+      Total |        335      100.00
+------ Horizon 9 months ------
+
+treatment_9 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       65.48       65.48
+          1 |        116       34.52      100.00
+------------+-----------------------------------
+      Total |        336      100.00
+------ Horizon 10 months ------
+
+treatment_1 |
+          0 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       62.86       62.86
+          1 |        130       37.14      100.00
+------------+-----------------------------------
+      Total |        350      100.00
+------ Horizon 11 months ------
+
+treatment_1 |
+          1 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       69.40       69.40
+          1 |         97       30.60      100.00
+------------+-----------------------------------
+      Total |        317      100.00
+------ Horizon 12 months ------
+
+treatment_1 |
+          2 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       68.11       68.11
+          1 |        103       31.89      100.00
+------------+-----------------------------------
+      Total |        323      100.00
+------ Horizon 13 months ------
+
+treatment_1 |
+          3 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       70.29       70.29
+          1 |         93       29.71      100.00
+------------+-----------------------------------
+      Total |        313      100.00
+------ Horizon 14 months ------
+
+treatment_1 |
+          4 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       68.11       68.11
+          1 |        103       31.89      100.00
+------------+-----------------------------------
+      Total |        323      100.00
+------ Horizon 15 months ------
+
+treatment_1 |
+          5 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       66.47       66.47
+          1 |        111       33.53      100.00
+------------+-----------------------------------
+      Total |        331      100.00
+------ Horizon 16 months ------
+
+treatment_1 |
+          6 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       67.90       67.90
+          1 |        104       32.10      100.00
+------------+-----------------------------------
+      Total |        324      100.00
+------ Horizon 17 months ------
+
+treatment_1 |
+          7 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       76.92       76.92
+          1 |         66       23.08      100.00
+------------+-----------------------------------
+      Total |        286      100.00
+------ Horizon 18 months ------
+
+treatment_1 |
+          8 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       83.97       83.97
+          1 |         42       16.03      100.00
+------------+-----------------------------------
+      Total |        262      100.00
+------ Horizon 19 months ------
+
+treatment_1 |
+          9 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       78.01       78.01
+          1 |         62       21.99      100.00
+------------+-----------------------------------
+      Total |        282      100.00
+------ Horizon 20 months ------
+
+treatment_2 |
+          0 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       77.74       77.74
+          1 |         63       22.26      100.00
+------------+-----------------------------------
+      Total |        283      100.00
+------ Horizon 21 months ------
+
+treatment_2 |
+          1 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       77.19       77.19
+          1 |         65       22.81      100.00
+------------+-----------------------------------
+      Total |        285      100.00
+------ Horizon 22 months ------
+
+treatment_2 |
+          2 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       90.91       90.91
+          1 |         22        9.09      100.00
+------------+-----------------------------------
+      Total |        242      100.00
+------ Horizon 23 months ------
+
+treatment_2 |
+          3 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       94.02       94.02
+          1 |         14        5.98      100.00
+------------+-----------------------------------
+      Total |        234      100.00
+------ Horizon 24 months ------
+
+treatment_2 |
+          4 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       96.07       96.07
+          1 |          9        3.93      100.00
+------------+-----------------------------------
+      Total |        229      100.00
+------ Horizon 25 months ------
+
+treatment_2 |
+          5 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       94.42       94.42
+          1 |         13        5.58      100.00
+------------+-----------------------------------
+      Total |        233      100.00
+------ Horizon 26 months ------
+
+treatment_2 |
+          6 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       92.44       92.44
+          1 |         18        7.56      100.00
+------------+-----------------------------------
+      Total |        238      100.00
+------ Horizon 27 months ------
+
+treatment_2 |
+          7 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       94.02       94.02
+          1 |         14        5.98      100.00
+------------+-----------------------------------
+      Total |        234      100.00
+------ Horizon 28 months ------
+
+treatment_2 |
+          8 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       96.07       96.07
+          1 |          9        3.93      100.00
+------------+-----------------------------------
+      Total |        229      100.00
+------ Horizon 29 months ------
+
+treatment_2 |
+          9 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       98.65       98.65
+          1 |          3        1.35      100.00
+------------+-----------------------------------
+      Total |        223      100.00
+------ Horizon 30 months ------
+
+treatment_3 |
+          0 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       97.78       97.78
+          1 |          5        2.22      100.00
+------------+-----------------------------------
+      Total |        225      100.00
+------ Horizon 31 months ------
+
+treatment_3 |
+          1 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       97.78       97.78
+          1 |          5        2.22      100.00
+------------+-----------------------------------
+      Total |        225      100.00
+------ Horizon 32 months ------
+
+treatment_3 |
+          2 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       97.78       97.78
+          1 |          5        2.22      100.00
+------------+-----------------------------------
+      Total |        225      100.00
+------ Horizon 33 months ------
+
+treatment_3 |
+          3 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       99.10       99.10
+          1 |          2        0.90      100.00
+------------+-----------------------------------
+      Total |        222      100.00
+------ Horizon 34 months ------
+
+treatment_3 |
+          4 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220      100.00      100.00
+------------+-----------------------------------
+      Total |        220      100.00
+------ Horizon 35 months ------
+
+treatment_3 |
+          5 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220      100.00      100.00
+------------+-----------------------------------
+      Total |        220      100.00
+------ Horizon 36 months ------
+
+treatment_3 |
+          6 |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        220       99.55       99.55
+          1 |          1        0.45      100.00
+------------+-----------------------------------
+      Total |        221      100.00
+
+. 
+. * 8. Summary statistics table
+. 
+. * Child-level treatment + pre/post flags
+. * Define vars once
+. local sumvars p_imc male bmi_baseline anemia_baseline ///
+>     calories_weekly iron_weekly food_spending age
+
+. 
+. display "`sumvars'"     
+p_imc male bmi_baseline anemia_baseline     calories_weekly iron_weekly food_spendi
+> ng age
+
+.         
+. * 1) Treated: 4 months exposure
+. preserve
+
+.     keep if treatment_12
+(883 observations deleted)
+
+.     outreg2 using "eda/sumstats_uka.xls", ///
+>         sum(log) ///
+>         keep(`sumvars') ///
+>         ctitle("Treated, 12 months exposure") ///
+>         replace
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+    id_ninio |        103    35316.92    18792.72       2740      68550
+    id_madre |        103    25510.48       14336        575      54650
+    id_cedit |        103    5.116505    2.624548          1         10
+id_municipio |        103    90.76699    47.10526          1        169
+id_localidad |        103    346.4272    158.1455          9        617
+-------------+---------------------------------------------------------
+    id_grupo |        103    451.7282    212.4607         10        815
+   peso_edad |        103    17.02422    4.620227   11.00616   37.55236
+        peso |        103    9.451165    1.392758        6.1      12.95
+        pedz |        103   -.8118612    1.051698  -3.278164   2.321002
+        petz |        103   -.0046853    .9788053  -1.758479    3.50844
+-------------+---------------------------------------------------------
+       p_imc |        103    .2622786    .9918371  -1.512158   3.742979
+  talla_edad |        103    17.02422    4.620227   11.00616   37.55236
+       talla |        103    75.54369    5.268453       65.2         92
+        tedz |        103    -1.63244    1.303366   -4.15692   4.846991
+          hb |         29    10.92069     1.50342        7.1       13.8
+-------------+---------------------------------------------------------
+     hb_edad |         29    17.07513    5.135768   12.25462   37.55236
+     hb_hbaj |         29    10.46922    1.341807        7.1   13.43873
+     altitud |        103    1265.825    927.7146          2       2970
+     sexonum |        103    1.563107     .498427          1          2
+ nummed_peso |        103    6.592233    1.491393          4         10
+-------------+---------------------------------------------------------
+     num_hbs |        103    2.718447    1.216049          0          6
+galletas_e~s |          8     266.125    105.7523         52        358
+galletas_c~s |          8     234.375    96.33563         36        297
+numero_ent~s |          8        12.5    4.598136          3         16
+    imn_2020 |         99    .7647021    .0858227   .5113182   .9248385
+-------------+---------------------------------------------------------
+      pobtot |        101    5721.257    19297.76          5     183509
+     p_5ymas |         99    5289.717    17786.35        111     167638
+     pobmen5 |         99    547.0202    1692.639         17      15871
+peso_edad_~i |        103    5.233069       4.544   .2956878   26.51335
+    peso_ini |        103    6.366699    1.876855        2.3      10.66
+-------------+---------------------------------------------------------
+    pedz_ini |        103   -.4896801    1.159268  -3.920402   1.820867
+    petz_ini |        103   -9.010142    98.51125       -999   3.202816
+   p_imc_ini |        103    .3905223     1.14754  -3.821582   2.872575
+peso_edad_~n |        103    22.80848     7.01941   11.40041   45.37166
+    peso_fin |        103    10.51816    1.542188       7.25      14.85
+-------------+---------------------------------------------------------
+    pedz_fin |        103   -.7764277     .973953  -3.134519   2.200897
+    petz_fin |         99     .133732    .9107163  -1.637718   2.529042
+   p_imc_fin |         99    .4002856    .9202167  -1.512158   2.542275
+talla_edad~i |        103    5.233069       4.544   .2956878   26.51335
+   talla_ini |        103     60.6301    7.989979       42.5         85
+-------------+---------------------------------------------------------
+    tedz_ini |        103   -1.294104    1.208292  -5.055138   1.749161
+talla_edad~n |        103    22.71406    6.986767   11.40041   45.37166
+   talla_fin |        103    79.84369     6.00251       66.9         94
+    tedz_fin |        103   -1.687215    1.186852  -4.898124   4.846991
+      hb_ini |         88     10.9625    1.128758        8.3       13.3
+-------------+---------------------------------------------------------
+ hb_edad_ini |         88    10.29083    3.844544   5.650924   30.88296
+ hb_hbaj_ini |         88    10.60128    1.021371   7.956166   12.78383
+      hb_fin |         88    11.38068    1.300385        6.9       13.8
+ hb_edad_fin |         88    21.83797    6.599251   11.07187   42.61191
+ hb_hbaj_fin |         88    11.00487    1.187803        6.9       13.4
+-------------+---------------------------------------------------------
+pctgpeso_5~n |        103    86.81044    23.37981   34.04076   157.0563
+pctgpeso_1~n |        103    97.53682    26.05351   38.47981   171.6949
+  num_med_hb |         29    2.137931    .5808945          1          3
+dias_desde~b |         26    184.8846    47.44034         70        322
+edad_dias_~o |        103    518.1748    140.6282        335       1143
+-------------+---------------------------------------------------------
+edad_dias_hb |         29    519.7241    156.3199        373       1143
+edad_dias_~a |        103    518.1748    140.6282        335       1143
+edad_meses~o |        103    17.02039    4.621165         11       37.5
+edad_meses~b |         29    17.06207    5.128521       12.3       37.5
+edad_meses~a |        103    17.02039    4.621165         11       37.5
+-------------+---------------------------------------------------------
+  numfamilia |        103    56649.67    18364.98         47      75834
+numeronini~a |        103    1.883495    .8552144          1          4
+      genero |        103    .4368932     .498427          0          1
+    grupoedi |        103    8.776699    1.527089          5         12
+grupoedian~r |        103    8.650485    1.582433          5         12
+-------------+---------------------------------------------------------
+resultado~so |        103    1.184466     .414151          1          3
+resultado~ta |        103     1.15534    .3639996          1          2
+resultado~no |        103     1.07767    .2689602          1          2
+resultadol~e |        103    1.359223    .5212047          1          3
+resultados~l |        103    1.087379      .28377          1          2
+-------------+---------------------------------------------------------
+resultadoc~o |        103           1           0          1          1
+resultadoe~a |        103    1.019417    .1970659          1          3
+resultado~ma |        103    1.135922    .5058199          1          3
+resultadofrb |        103    1.417476    .4955542          1          2
+   resultado |        103    1.679612    .6599702          1          3
+-------------+---------------------------------------------------------
+edad_meses~n |        103    17.52278    5.441469   5.749487    34.7269
+delta_dias.. |        103    37.96117    10.78663          0         86
+edadmeses_.. |        103    17.52086    5.393255   7.030801   34.56263
+peso_mas_c~o |        103    9.429126    1.331814       6.65       14.2
+pedz_mas_c~o |        103   -.5984466    .9183358      -3.05       1.92
+-------------+---------------------------------------------------------
+delta_dias~c |        103     58.8835    39.57725          0        287
+edadmeses_~a |        103    16.97063    5.717026   6.702259   34.56263
+petz_mas_c~o |        103    .1913592    .8852064      -1.94       3.76
+imcz_mas_c~o |        103    .3796117    .8652926      -1.41       3.85
+d~talla_ma~o |        103     58.8835    39.57725          0        287
+-------------+---------------------------------------------------------
+e~talla_ma~o |        103    16.97063    5.717026   6.702259   34.56263
+talla_mas_~o |        103    75.15243    5.900828       62.2       88.5
+tedz_mas_c~o |        103   -1.361845     1.04522      -3.56       2.04
+cuántosaño~e |        103    27.86408    6.124602         16         48
+cuántasper~n |        103    5.708738    2.172155          3         13
+-------------+---------------------------------------------------------
+cuántoscua~r |        103    2.194175    1.076106          1          5
+delingreso~s |        100       624.6    335.6478         30       1500
+          fa |         99    345.5556    318.7419          0       1500
+          fb |         98    166.6224    221.3665          0       1500
+          fc |        100      266.47    252.2383          0       1000
+-------------+---------------------------------------------------------
+   resocerdo |        103    1.864078    1.066868          0          5
+       pollo |        103    2.543689    1.356008          0          5
+pescadofre~o |        103    1.087379    1.408008          0          7
+atúnosardi~a |        103    1.631068    1.407196          0          7
+       leche |        103    4.786408    2.008074          0          7
+-------------+---------------------------------------------------------
+       huevo |        103    4.048544    1.982169          2          7
+      frijol |        103    4.592233     2.09779          0          7
+     lenteja |        103    3.145631    1.849259          0          7
+       arroz |        103    3.563107    1.829336          0          7
+       avena |        103    3.805825    2.058261          0          7
+-------------+---------------------------------------------------------
+      frutas |        103    4.864078    2.123854          0          7
+    verduras |        103    4.728155     1.94631          2          7
+    tortilla |        103    6.281553    1.756877          0          7
+         pan |        103    3.669903    2.097563          0          7
+ sopadepasta |        103    3.805825    1.884187          0          7
+-------------+---------------------------------------------------------
+ aguanatural |        103    6.009709    1.912268          2          7
+aguadefrutas |        103    3.718447    2.093021          0          7
+   refrescos |        103    2.145631    1.779005          0          7
+jugosazuca~s |        103    1.631068    1.691909          0          7
+friturasop~s |        103    1.660194    1.511741          0          7
+-------------+---------------------------------------------------------
+total_calo~a |        103    6416.893    1621.625       2990      12080
+total_hier~a |        103     49.1932    13.13332       18.2       86.6
+   date_meas |        103    23487.19    184.6788      23052      23714
+date_birth_m |        103    754.1068    7.244894        732        766
+      meas_m |        103    771.1942    5.955815        757        779
+-------------+---------------------------------------------------------
+  edad_meses |        103    17.02422    4.620227   11.00616   37.55236
+rounded_ed~s |        103    17.06796    4.659509         11         38
+ calendar_ym |        103    771.1942    5.955815        757        779
+        male |        103    .5631068     .498427          0          1
+bmi_baseline |        103    .3905223     1.14754  -3.821582   2.872575
+-------------+---------------------------------------------------------
+anemia_bas~e |         88    .5454545    .5007831          0          1
+calories_w~y |        103    6416.893    1621.625       2990      12080
+ iron_weekly |        103     49.1932    13.13332       18.2       86.6
+food_spend~g |        100       624.6    335.6478         30       1500
+         age |        103    17.02422    4.620227   11.00616   37.55236
+-------------+---------------------------------------------------------
+ age_squared |        103    310.9634    197.1441   121.1356    1410.18
+   age_cubed |        103    6179.133    7055.252   1333.237   52955.58
+ calendar_fe |        103    23.48544    5.457257         11         31
+municipio_fe |        103     50.3301    28.66691          1         96
+ locality_fe |        103    101.2039    51.62162          3        190
+-------------+---------------------------------------------------------
+    grupo_fe |        103    114.6505    61.81847          3        220
+start_dat~po |        103    23127.61    180.4593      22713      23357
+start_m_gr~o |        103    759.3883    5.962683        746        767
+start_date~y |        103    23127.34    180.1312      22713      23355
+start_m_lo~y |        103    759.3786     5.95097        746        767
+-------------+---------------------------------------------------------
+start_dat~io |        103    23048.82    158.6144      22713      23343
+start_m_mu~o |        103     756.767    5.221006        746        766
+first_meas~d |        103     23128.3     180.211      22713      23358
+program_ex~e |        103    11.81553    .7889876         11         13
+enrolled_a~t |        103           1           0          1          1
+-------------+---------------------------------------------------------
+in_control~w |        103           0           0          0          0
+best_control |        103           0           0          0          0
+     treat_3 |        103           0           0          0          0
+   control_3 |        103           0           0          0          0
+    sample_3 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+ treatment_3 |        103           0           0          0          0
+     treat_4 |        103           0           0          0          0
+   control_4 |        103           0           0          0          0
+    sample_4 |        103           0           0          0          0
+ treatment_4 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+     treat_5 |        103           0           0          0          0
+   control_5 |        103           0           0          0          0
+    sample_5 |        103           0           0          0          0
+ treatment_5 |        103           0           0          0          0
+     treat_6 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+   control_6 |        103           0           0          0          0
+    sample_6 |        103           0           0          0          0
+ treatment_6 |        103           0           0          0          0
+     treat_7 |        103           0           0          0          0
+   control_7 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+    sample_7 |        103           0           0          0          0
+ treatment_7 |        103           0           0          0          0
+     treat_8 |        103           0           0          0          0
+   control_8 |        103           0           0          0          0
+    sample_8 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+ treatment_8 |        103           0           0          0          0
+     treat_9 |        103           0           0          0          0
+   control_9 |        103           0           0          0          0
+    sample_9 |        103           0           0          0          0
+ treatment_9 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_10 |        103    .4174757    .4955542          0          1
+  control_10 |        103           0           0          0          0
+   sample_10 |        103    .4174757    .4955542          0          1
+treatment_10 |        103    .4174757    .4955542          0          1
+    treat_11 |        103    .7669903    .4248156          0          1
+-------------+---------------------------------------------------------
+  control_11 |        103           0           0          0          0
+   sample_11 |        103    .7669903    .4248156          0          1
+treatment_11 |        103    .7669903    .4248156          0          1
+    treat_12 |        103           1           0          1          1
+  control_12 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+   sample_12 |        103           1           0          1          1
+treatment_12 |        103           1           0          1          1
+    treat_13 |        103    .5825243    .4955542          0          1
+  control_13 |        103           0           0          0          0
+   sample_13 |        103    .5825243    .4955542          0          1
+-------------+---------------------------------------------------------
+treatment_13 |        103    .5825243    .4955542          0          1
+    treat_14 |        103    .2330097    .4248156          0          1
+  control_14 |        103           0           0          0          0
+   sample_14 |        103    .2330097    .4248156          0          1
+treatment_14 |        103    .2330097    .4248156          0          1
+-------------+---------------------------------------------------------
+    treat_15 |        103           0           0          0          0
+  control_15 |        103           0           0          0          0
+   sample_15 |        103           0           0          0          0
+treatment_15 |        103           0           0          0          0
+    treat_16 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+  control_16 |        103           0           0          0          0
+   sample_16 |        103           0           0          0          0
+treatment_16 |        103           0           0          0          0
+    treat_17 |        103           0           0          0          0
+  control_17 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+   sample_17 |        103           0           0          0          0
+treatment_17 |        103           0           0          0          0
+    treat_18 |        103           0           0          0          0
+  control_18 |        103           0           0          0          0
+   sample_18 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+treatment_18 |        103           0           0          0          0
+    treat_19 |        103           0           0          0          0
+  control_19 |        103           0           0          0          0
+   sample_19 |        103           0           0          0          0
+treatment_19 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_20 |        103           0           0          0          0
+  control_20 |        103           0           0          0          0
+   sample_20 |        103           0           0          0          0
+treatment_20 |        103           0           0          0          0
+    treat_21 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+  control_21 |        103           0           0          0          0
+   sample_21 |        103           0           0          0          0
+treatment_21 |        103           0           0          0          0
+    treat_22 |        103           0           0          0          0
+  control_22 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+   sample_22 |        103           0           0          0          0
+treatment_22 |        103           0           0          0          0
+    treat_23 |        103           0           0          0          0
+  control_23 |        103           0           0          0          0
+   sample_23 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+treatment_23 |        103           0           0          0          0
+    treat_24 |        103           0           0          0          0
+  control_24 |        103           0           0          0          0
+   sample_24 |        103           0           0          0          0
+treatment_24 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_25 |        103           0           0          0          0
+  control_25 |        103           0           0          0          0
+   sample_25 |        103           0           0          0          0
+treatment_25 |        103           0           0          0          0
+    treat_26 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+  control_26 |        103           0           0          0          0
+   sample_26 |        103           0           0          0          0
+treatment_26 |        103           0           0          0          0
+    treat_27 |        103           0           0          0          0
+  control_27 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+   sample_27 |        103           0           0          0          0
+treatment_27 |        103           0           0          0          0
+    treat_28 |        103           0           0          0          0
+  control_28 |        103           0           0          0          0
+   sample_28 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+treatment_28 |        103           0           0          0          0
+    treat_29 |        103           0           0          0          0
+  control_29 |        103           0           0          0          0
+   sample_29 |        103           0           0          0          0
+treatment_29 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_30 |        103           0           0          0          0
+  control_30 |        103           0           0          0          0
+   sample_30 |        103           0           0          0          0
+treatment_30 |        103           0           0          0          0
+    treat_31 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+  control_31 |        103           0           0          0          0
+   sample_31 |        103           0           0          0          0
+treatment_31 |        103           0           0          0          0
+    treat_32 |        103           0           0          0          0
+  control_32 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+   sample_32 |        103           0           0          0          0
+treatment_32 |        103           0           0          0          0
+    treat_33 |        103           0           0          0          0
+  control_33 |        103           0           0          0          0
+   sample_33 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+treatment_33 |        103           0           0          0          0
+    treat_34 |        103           0           0          0          0
+  control_34 |        103           0           0          0          0
+   sample_34 |        103           0           0          0          0
+treatment_34 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_35 |        103           0           0          0          0
+  control_35 |        103           0           0          0          0
+   sample_35 |        103           0           0          0          0
+treatment_35 |        103           0           0          0          0
+    treat_36 |        103           0           0          0          0
+-------------+---------------------------------------------------------
+  control_36 |        103           0           0          0          0
+   sample_36 |        103           0           0          0          0
+treatment_36 |        103           0           0          0          0
+
+Following variable is string, not included:  
+periodo  fnac_ym  fnacmadre_ym  fecha  pednut  petnut  p_imc2  peso_fsoma  tednut  
+> tallafsoma  hbfsoma  hb_anemiacat  hb_anemiadicot  primer_entrega  ultimaentrega 
+>  fecha_consulta  timeproc  gm_2020  pednut_ini  petnut_ini  p_imc2_ini  peso_fsom
+> a_ini  pednut_fin  petnut_fin  p_imc2_fin  peso_fsoma_fin  tednut_ini  tallafsoma
+> _ini  tednut_fin  tallafsoma_fin  hbfsoma_ini  hb_anemiacat_ini  hb_anemiadicot_i
+> ni  hbfsoma_fin  hb_anemiacat_fin  hb_anemiadicot_fin  resultadotexto  fecha_peso
+> _mas_cercano  pednut_mas_cercano  fecha_peso_y_talla_mas_cercano  petnut_mas_cerc
+> ano  imcnut_mas_cercano  fecha_talla_mas_cercano  tednut_mas_cercano  fecha_hb_ma
+> s_cercano  delta_dias_hb_mas_cercano  edadmeses_hb_mas_cercano  hb_mas_cercano  h
+> bajustada_mas_cercano  diag_hb_mas_cercano  cuálessuescolaridad  cuálessuocupació
+> naquése  elpadredelosniñosqueestán  cuáleslaprincipalactividad  cuántoeselingreso
+> aproximado  deacuerdoconsuculturauste  ustedhablaalgunalenguaindíg  quélenguaindí
+> genahabla  elcelulardelquedisponees  ensucomunidadtieneseñalde  ensuhogardisponen
+> deconexió  cómoeslapropiedaddesuvivi  dequématerialeslamayorpar  ff  fg  suvivien
+> datieneuncuartoind  cómoacostumbracocinarycalen  paraladisposicióndeexcretas  act
+> ualmenterecibeustedyoal  llevaasushijosaalgúnlugar  llevaasushijosparajugaren  cu
+> ántoslibrosparaniñasyniñ  ensuviviendatienenaguapu  ensuviviendacómoalmacenael  q
+> uétratamientoledaalaguap  cuántosdíasalasemanallega  dóndealmacenalosalimentos  e
+> nlosúltimos7díassuhijoc  quésuplementoconsumiósuhijo  ensulocalidadquéserviciode 
+>  delosserviciosdesaluddesu  ensulocalidadustedusaactua  encasodeemergenciadesalud
+>   Following variable has no observation, not included:  
+fixnleon  dist_0  
+eda/sumstats_uka.xls
+dir : seeout
+
+. restore
+
+. 
+. * 2) Control: just joined / 0 months exposure
+. preserve
+
+.     keep if best_control
+(769 observations deleted)
+
+.     outreg2 using "eda/sumstats_uka.xls", ///
+>         sum(log) ///
+>         keep(`sumvars') ///
+>         ctitle("Control, 0 months exposure") ///
+>         append
+
+    Variable |        Obs        Mean    Std. dev.       Min        Max
+-------------+---------------------------------------------------------
+    id_ninio |        217    35733.18    19266.52        155      68550
+    id_madre |        217    26847.37    15230.92         67      55995
+    id_cedit |        217    5.156682    2.861521          1         10
+id_municipio |        217    82.08756    48.14193          1        169
+id_localidad |        217    329.4378    166.6757          2        618
+-------------+---------------------------------------------------------
+    id_grupo |        217    432.2581    222.1292          2        816
+   peso_edad |        217    5.981888    5.039785   .2956878   30.62012
+        peso |        217    6.734608    2.037418       2.04      16.25
+        pedz |        217   -.4038506    1.157326  -4.866616   2.778881
+        petz |        217   -4.022923    67.86834       -999   3.202816
+-------------+---------------------------------------------------------
+       p_imc |        217    .3632935    1.173463  -4.455322   3.182813
+  talla_edad |        217    5.981888    5.039785   .2956878   30.62012
+       talla |        217     62.2553     8.33646       42.5       95.5
+        tedz |        217   -1.110327    1.344022  -5.055138   4.836965
+          hb |         54    10.95556    1.245621        7.5       13.5
+-------------+---------------------------------------------------------
+     hb_edad |         54    10.34117     3.74882   4.172485   21.12526
+     hb_hbaj |         54    10.63979    1.102468        7.5   12.74036
+     altitud |        217    1101.346    874.1189          0       3120
+     sexonum |        217    1.543779    .4992314          1          2
+ nummed_peso |        217    6.092166    1.805543          2         10
+-------------+---------------------------------------------------------
+     num_hbs |        217    2.516129      1.2099          0          6
+galletas_e~s |         12      290.75    92.68924         52        358
+galletas_c~s |         12    269.0833    93.16892         36        354
+numero_ent~s |         12    13.58333    4.010403          3         16
+    imn_2020 |        211     .766649    .0982734   .2644857   .9248385
+-------------+---------------------------------------------------------
+      pobtot |        213    4428.915    13928.21          5     183509
+     p_5ymas |        211    4048.711     12768.4         12     167638
+     pobmen5 |        211    422.1374    1222.961          1      15871
+    fixnleon |          7           1           0          1          1
+peso_edad_~i |        217    5.889836     4.93668   .2956878   27.56468
+-------------+---------------------------------------------------------
+    peso_ini |        217    6.695668    1.992619       2.04       15.5
+    pedz_ini |        217   -.4060009    1.145608  -4.866616    2.24874
+    petz_ini |        210   -4.206047    68.98767       -999   3.202816
+   p_imc_ini |        210    .3298064    1.158198  -4.455322   2.872575
+peso_edad_~n |        217    21.71118    7.260689   6.735113   45.37166
+-------------+---------------------------------------------------------
+    peso_fin |        217    10.43304    1.775922       6.15      16.25
+    pedz_fin |        217   -.7060368    1.015496  -3.134519   2.532568
+    petz_fin |        202    .1426612    .8880236  -2.323869   2.529042
+   p_imc_fin |        202    .3816278    .8898445  -2.264009   2.542275
+talla_edad~i |        214    5.840834    4.948475   .2956878   26.87474
+-------------+---------------------------------------------------------
+   talla_ini |        214    61.96636     8.14557       42.5         91
+    tedz_ini |        214   -1.126051    1.349571  -5.055138   4.836965
+talla_edad~n |        214    21.69437     7.28449   6.373717   45.37166
+   talla_fin |        214    79.23318     6.86247       60.6       96.5
+    tedz_fin |        214   -1.599403    1.249152  -4.948228   4.846991
+-------------+---------------------------------------------------------
+      hb_ini |        171    10.88538    1.146179        7.5       13.6
+ hb_edad_ini |        171    10.23668    3.530095   4.172485   30.88296
+ hb_hbaj_ini |        171    10.62422    1.043235        7.5       13.6
+      hb_fin |        171    11.41696    1.314491        6.9       17.6
+ hb_edad_fin |        171    21.66994    6.029631   11.07187   42.61191
+-------------+---------------------------------------------------------
+ hb_hbaj_fin |        171    11.14551    1.238654        6.9       17.6
+pctgpeso_5~n |        217    86.84794    28.78123  -32.56151   190.4474
+pctgpeso_1~n |        217    97.60952    32.36624  -36.46677   215.0171
+  num_med_hb |         54           1           0          1          1
+edad_dias_~o |        217    182.0737    153.3985          9        932
+-------------+---------------------------------------------------------
+edad_dias_hb |         54    314.7593    114.1047        127        643
+edad_dias_~a |        217    182.0737    153.3985          9        932
+edad_meses~o |        217    5.981106    5.037274         .3       30.6
+edad_meses~b |         54    10.34074    3.742793        4.2       21.1
+edad_meses~a |        217    5.981106    5.037274         .3       30.6
+-------------+---------------------------------------------------------
+  numfamilia |        217    59161.35    17920.47          1      80228
+numeronini~a |        217     1.81106     .885201          1          5
+      genero |        217    .4562212    .4992314          0          1
+    grupoedi |        217    8.552995    1.615378          5         12
+grupoedian~r |        217    8.451613    1.643931          5         12
+-------------+---------------------------------------------------------
+resultado~so |        217    1.179724     .408196          1          3
+resultado~ta |        217    1.152074    .3599226          1          2
+resultado~no |        217    1.101382    .3025324          1          2
+resultadol~e |        217    1.327189    .4989321          1          3
+resultados~l |        217    1.082949    .2764433          1          2
+-------------+---------------------------------------------------------
+resultadoc~o |        217           1           0          1          1
+resultadoe~a |        217    1.018433    .1915612          1          3
+resultado~ma |        217    1.147465    .5238793          1          3
+resultadofrb |        217    1.400922    .4912183          1          2
+   resultado |        217    1.640553     .645365          1          3
+-------------+---------------------------------------------------------
+edad_meses~n |        217    16.76806    5.583376    4.99384    34.7269
+delta_dias.. |        217    39.29954    11.74449          0         86
+edadmeses_.. |        217    16.72718    5.624959   4.008214   34.56263
+peso_mas_c~o |        217     9.39447    1.517172       5.15       15.5
+pedz_mas_c~o |        217   -.4904608    1.028686      -3.99       2.78
+-------------+---------------------------------------------------------
+delta_dias~c |        217     60.1106    38.76349          0        287
+edadmeses_~a |        217    16.23089    6.012332   1.905544   34.56263
+petz_mas_c~o |        217    .2426728    .9619614      -3.76       3.76
+imcz_mas_c~o |        217    .3947005    .9372497      -3.46       3.85
+d~talla_ma~o |        217     60.1106    38.76349          0        287
+-------------+---------------------------------------------------------
+e~talla_ma~o |        217    16.23089    6.012332   1.905544   34.56263
+talla_mas_~o |        217    74.70829    6.672263       52.4         91
+tedz_mas_c~o |        217       -1.21    1.250618      -4.02       2.36
+cuántosaño~e |        217    27.96313    6.672118         15         65
+cuántasper~n |        217    5.718894    2.278983          2         15
+-------------+---------------------------------------------------------
+cuántoscua~r |        217    2.129032    1.068027          1          6
+delingreso~s |        208    679.6635    366.2836          0       1500
+          fa |        207    378.2609    352.5935          0       1500
+          fb |        203    201.9409    266.2337          0       1500
+          fc |        208     269.649      292.69          0       1500
+-------------+---------------------------------------------------------
+   resocerdo |        217    1.940092    1.076305          0          5
+       pollo |        217    2.400922    1.265862          0          5
+pescadofre~o |        217           1    1.381089          0          7
+atúnosardi~a |        217    1.645161    1.554083          0          7
+       leche |        217    4.557604    2.103271          0          7
+-------------+---------------------------------------------------------
+       huevo |        217    4.119816    1.977752          2          7
+      frijol |        217    4.682028    2.091716          0          7
+     lenteja |        217    3.124424    1.885177          0          7
+       arroz |        217    3.506912    1.785019          0          7
+       avena |        217    3.741935    2.036187          0          7
+-------------+---------------------------------------------------------
+      frutas |        217    4.774194    2.103717          0          7
+    verduras |        217     4.83871    1.994616          0          7
+    tortilla |        217    6.299539    1.663233          0          7
+         pan |        217    3.718894    2.127697          0          7
+ sopadepasta |        217    3.852535    1.901852          0          7
+-------------+---------------------------------------------------------
+ aguanatural |        217    6.119816    1.836972          0          7
+aguadefrutas |        217    3.751152    2.209577          0          7
+   refrescos |        217    2.456221     2.03196          0          7
+jugosazuca~s |        217    1.824885    1.812183          0          7
+friturasop~s |        217    1.824885    1.693322          0          7
+-------------+---------------------------------------------------------
+total_calo~a |        217    6440.922    1586.464       2520      12080
+total_hier~a |        217    49.26774     12.8505       18.2       86.6
+   date_meas |        217    23181.57    200.3768      22566      23681
+date_birth_m |        217    755.1244    7.291434        732        770
+      meas_m |        217    761.1475    6.600814        741        778
+-------------+---------------------------------------------------------
+  edad_meses |        217    5.981889    5.039785   .2956878   30.62012
+rounded_ed~s |        217    6.013825    5.071233          0         31
+ calendar_ym |        217    761.1475    6.600814        741        778
+        male |        217    .5437788    .4992314          0          1
+bmi_baseline |        210    .3298064    1.158198  -4.455322   2.872575
+-------------+---------------------------------------------------------
+anemia_bas~e |        171    .5672515    .4969117          0          1
+calories_w~y |        217    6440.922    1586.464       2520      12080
+ iron_weekly |        217    49.26774     12.8505       18.2       86.6
+food_spend~g |        208    679.6635    366.2836          0       1500
+         age |        217    5.981889    5.039785   .2956878   30.62012
+-------------+---------------------------------------------------------
+ age_squared |        217    61.06538    110.0625   .0874313   937.5919
+   age_cubed |        217     874.928    2689.371   .0258524   28709.18
+ calendar_fe |        217    14.52995     5.60508          1         30
+municipio_fe |        217    45.08295    29.21841          1         96
+ locality_fe |        217    95.69124     54.0492          1        191
+-------------+---------------------------------------------------------
+    grupo_fe |        217    109.2166    64.09321          1        221
+start_dat~po |        217    23180.79    199.9202      22566      23681
+start_m_gr~o |        217    761.1152    6.580738        741        778
+start_date~y |        217    23180.61    199.8479      22566      23681
+start_m_lo~y |        217    761.1106    6.576947        741        778
+-------------+---------------------------------------------------------
+start_dat~io |        217    23066.33    177.3216      22566      23546
+start_m_mu~o |        217    757.3502    5.836262        741        773
+first_meas~d |        217    23181.57    200.3768      22566      23681
+program_ex~e |        217    .0368664    .1888693          0          1
+enrolled_a~t |        217           1           0          1          1
+-------------+---------------------------------------------------------
+in_control~w |        217           1           0          1          1
+      dist_0 |        217    .0368664    .1888693          0          1
+best_control |        217           1           0          1          1
+     treat_3 |        217           0           0          0          0
+   control_3 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+    sample_3 |        217           1           0          1          1
+ treatment_3 |        217           0           0          0          0
+     treat_4 |        217           0           0          0          0
+   control_4 |        217           1           0          1          1
+    sample_4 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+ treatment_4 |        217           0           0          0          0
+     treat_5 |        217           0           0          0          0
+   control_5 |        217           1           0          1          1
+    sample_5 |        217           1           0          1          1
+ treatment_5 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+     treat_6 |        217           0           0          0          0
+   control_6 |        217           1           0          1          1
+    sample_6 |        217           1           0          1          1
+ treatment_6 |        217           0           0          0          0
+     treat_7 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+   control_7 |        217           1           0          1          1
+    sample_7 |        217           1           0          1          1
+ treatment_7 |        217           0           0          0          0
+     treat_8 |        217           0           0          0          0
+   control_8 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+    sample_8 |        217           1           0          1          1
+ treatment_8 |        217           0           0          0          0
+     treat_9 |        217           0           0          0          0
+   control_9 |        217           1           0          1          1
+    sample_9 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+ treatment_9 |        217           0           0          0          0
+    treat_10 |        217           0           0          0          0
+  control_10 |        217           1           0          1          1
+   sample_10 |        217           1           0          1          1
+treatment_10 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_11 |        217           0           0          0          0
+  control_11 |        217           1           0          1          1
+   sample_11 |        217           1           0          1          1
+treatment_11 |        217           0           0          0          0
+    treat_12 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+  control_12 |        217           1           0          1          1
+   sample_12 |        217           1           0          1          1
+treatment_12 |        217           0           0          0          0
+    treat_13 |        217           0           0          0          0
+  control_13 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+   sample_13 |        217           1           0          1          1
+treatment_13 |        217           0           0          0          0
+    treat_14 |        217           0           0          0          0
+  control_14 |        217           1           0          1          1
+   sample_14 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+treatment_14 |        217           0           0          0          0
+    treat_15 |        217           0           0          0          0
+  control_15 |        217           1           0          1          1
+   sample_15 |        217           1           0          1          1
+treatment_15 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_16 |        217           0           0          0          0
+  control_16 |        217           1           0          1          1
+   sample_16 |        217           1           0          1          1
+treatment_16 |        217           0           0          0          0
+    treat_17 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+  control_17 |        217           1           0          1          1
+   sample_17 |        217           1           0          1          1
+treatment_17 |        217           0           0          0          0
+    treat_18 |        217           0           0          0          0
+  control_18 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+   sample_18 |        217           1           0          1          1
+treatment_18 |        217           0           0          0          0
+    treat_19 |        217           0           0          0          0
+  control_19 |        217           1           0          1          1
+   sample_19 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+treatment_19 |        217           0           0          0          0
+    treat_20 |        217           0           0          0          0
+  control_20 |        217           1           0          1          1
+   sample_20 |        217           1           0          1          1
+treatment_20 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_21 |        217           0           0          0          0
+  control_21 |        217           1           0          1          1
+   sample_21 |        217           1           0          1          1
+treatment_21 |        217           0           0          0          0
+    treat_22 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+  control_22 |        217           1           0          1          1
+   sample_22 |        217           1           0          1          1
+treatment_22 |        217           0           0          0          0
+    treat_23 |        217           0           0          0          0
+  control_23 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+   sample_23 |        217           1           0          1          1
+treatment_23 |        217           0           0          0          0
+    treat_24 |        217           0           0          0          0
+  control_24 |        217           1           0          1          1
+   sample_24 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+treatment_24 |        217           0           0          0          0
+    treat_25 |        217           0           0          0          0
+  control_25 |        217           1           0          1          1
+   sample_25 |        217           1           0          1          1
+treatment_25 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_26 |        217           0           0          0          0
+  control_26 |        217           1           0          1          1
+   sample_26 |        217           1           0          1          1
+treatment_26 |        217           0           0          0          0
+    treat_27 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+  control_27 |        217           1           0          1          1
+   sample_27 |        217           1           0          1          1
+treatment_27 |        217           0           0          0          0
+    treat_28 |        217           0           0          0          0
+  control_28 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+   sample_28 |        217           1           0          1          1
+treatment_28 |        217           0           0          0          0
+    treat_29 |        217           0           0          0          0
+  control_29 |        217           1           0          1          1
+   sample_29 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+treatment_29 |        217           0           0          0          0
+    treat_30 |        217           0           0          0          0
+  control_30 |        217           1           0          1          1
+   sample_30 |        217           1           0          1          1
+treatment_30 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_31 |        217           0           0          0          0
+  control_31 |        217           1           0          1          1
+   sample_31 |        217           1           0          1          1
+treatment_31 |        217           0           0          0          0
+    treat_32 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+  control_32 |        217           1           0          1          1
+   sample_32 |        217           1           0          1          1
+treatment_32 |        217           0           0          0          0
+    treat_33 |        217           0           0          0          0
+  control_33 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+   sample_33 |        217           1           0          1          1
+treatment_33 |        217           0           0          0          0
+    treat_34 |        217           0           0          0          0
+  control_34 |        217           1           0          1          1
+   sample_34 |        217           1           0          1          1
+-------------+---------------------------------------------------------
+treatment_34 |        217           0           0          0          0
+    treat_35 |        217           0           0          0          0
+  control_35 |        217           1           0          1          1
+   sample_35 |        217           1           0          1          1
+treatment_35 |        217           0           0          0          0
+-------------+---------------------------------------------------------
+    treat_36 |        217           0           0          0          0
+  control_36 |        217           1           0          1          1
+   sample_36 |        217           1           0          1          1
+treatment_36 |        217           0           0          0          0
+
+Following variable is string, not included:  
+periodo  fnac_ym  fnacmadre_ym  fecha  pednut  petnut  p_imc2  peso_fsoma  tednut  
+> tallafsoma  hbfsoma  hb_anemiacat  hb_anemiadicot  primer_entrega  ultimaentrega 
+>  fecha_consulta  timeproc  gm_2020  pednut_ini  petnut_ini  p_imc2_ini  peso_fsom
+> a_ini  pednut_fin  petnut_fin  p_imc2_fin  peso_fsoma_fin  tednut_ini  tallafsoma
+> _ini  tednut_fin  tallafsoma_fin  hbfsoma_ini  hb_anemiacat_ini  hb_anemiadicot_i
+> ni  hbfsoma_fin  hb_anemiacat_fin  hb_anemiadicot_fin  resultadotexto  fecha_peso
+> _mas_cercano  pednut_mas_cercano  fecha_peso_y_talla_mas_cercano  petnut_mas_cerc
+> ano  imcnut_mas_cercano  fecha_talla_mas_cercano  tednut_mas_cercano  fecha_hb_ma
+> s_cercano  delta_dias_hb_mas_cercano  edadmeses_hb_mas_cercano  hb_mas_cercano  h
+> bajustada_mas_cercano  diag_hb_mas_cercano  cuálessuescolaridad  cuálessuocupació
+> naquése  elpadredelosniñosqueestán  cuáleslaprincipalactividad  cuántoeselingreso
+> aproximado  deacuerdoconsuculturauste  ustedhablaalgunalenguaindíg  quélenguaindí
+> genahabla  elcelulardelquedisponees  ensucomunidadtieneseñalde  ensuhogardisponen
+> deconexió  cómoeslapropiedaddesuvivi  dequématerialeslamayorpar  ff  fg  suvivien
+> datieneuncuartoind  cómoacostumbracocinarycalen  paraladisposicióndeexcretas  act
+> ualmenterecibeustedyoal  llevaasushijosaalgúnlugar  llevaasushijosparajugaren  cu
+> ántoslibrosparaniñasyniñ  ensuviviendatienenaguapu  ensuviviendacómoalmacenael  q
+> uétratamientoledaalaguap  cuántosdíasalasemanallega  dóndealmacenalosalimentos  e
+> nlosúltimos7díassuhijoc  quésuplementoconsumiósuhijo  ensulocalidadquéserviciode 
+>  delosserviciosdesaluddesu  ensulocalidadustedusaactua  encasodeemergenciadesalud
+>   Following variable has no observation, not included:  
+dias_desde_anterior_hb  
+eda/sumstats_uka.xls
+dir : seeout
+
+. restore 
+
+. 
+. label data "UKA Exposure Dataset Creation - Created on $S_DATE"
+
+. save "`basepath'/data/uka_exposure_dataset.dta", replace
+file /Users/cameronkeith/Desktop/Econ/Econ
+    20/econ-uka-exposure/data/uka_exposure_dataset.dta saved
+
+. 
+. log close
+      name:  <unnamed>
+       log:  /Users/cameronkeith/Desktop/Econ/Econ 20/econ-uka-exposure/logs/create
+> _dataset.log
+  log type:  text
+ closed on:  17 Nov 2025, 18:19:44
+-----------------------------------------------------------------------------------

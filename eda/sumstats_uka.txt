@@ -1,0 +1,13 @@
+	(1)	(2)	(3)	(4)	(5)	(6)	(7)	(8)	(9)	(10)
+	Treated	Treated	Treated	Treated	Treated	Control	Control	Control	Control	Control
+VARIABLES	12 months exposure	12 months exposure	12 months exposure	12 months exposure	12 months exposure	0 months exposure	0 months exposure	0 months exposure	0 months exposure	0 months exposure
+										
+p_imc	103	0.262	0.992	-1.512	3.743	217	0.363	1.173	-4.455	3.183
+male	103	0.563	0.498	0	1	217	0.544	0.499	0	1
+bmi_baseline	103	0.391	1.148	-3.822	2.873	210	0.330	1.158	-4.455	2.873
+anemia_baseline	88	0.545	0.501	0	1	171	0.567	0.497	0	1
+calories_weekly	103	6,417	1,622	2,990	12,080	217	6,441	1,586	2,520	12,080
+iron_weekly	103	49.19	13.13	18.20	86.60	217	49.27	12.85	18.20	86.60
+food_spending	100	624.6	335.6	30	1,500	208	679.7	366.3	0	1,500
+age	103	17.02	4.620	11.01	37.55	217	5.982	5.040	0.296	30.62
+										

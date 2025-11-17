@@ -1,0 +1,92 @@
+-----------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/cameronkeith/Desktop/Econ/Econ 20/Group Project/src/UKA_analysi
+> s.log
+  log type:  text
+ opened on:  17 Nov 2025, 15:53:56
+
+. import excel using "panelUKA_fuzzymerge.xlsx", firstrow clear
+file panelUKA_fuzzymerge.xlsx not found
+r(601);
+
+end of do-file
+
+r(601);
+
+. do "/var/folders/yq/zsnmpb_s0k5113wpynp8st_40000gn/T//SD63594.000000"
+
+. /*
+> UKA Group Project - Selection on Observables Analysis
+> Econ 20: Measuring the causal impact of UKA exposure
+> 
+> 11/17/2025
+> Professor Duque
+> 
+> by:
+> Josh Wolfson,  josh.s.wolfson.26@dartmouth.edu
+> Cameron Keith, cameron.s.keith.26@dartmouth.edu
+> Annabella Wu,  annabella.wu.26@dartmouth.edu
+> Jesse Dong,    jesse.c.dong.26@dartmouth.edu
+> 
+> createDataset.do:
+> 
+> This stata script loads, cleans, processes, creates, and saves the final dataset 
+> to 'UKA_exposure_dataset.dta'. It also summarizes the treatment and control vars 
+> used in other regressions. 
+> 
+> Note: Please change line 26 to your working directory to run this code. 
+> */
+. 
+. * 0. Setup
+. clear all
+
+. 
+. * Note: Please change this line to your working directory
+. // local basepath "/Users/joshuawolfson/Desktop/Econ20/FinalProj"
+. local basepath "/Users/cameronkeith/Desktop/Econ/Econ 20/Group Project/"
+
+. cd `basepath'
+invalid syntax
+r(198);
+
+end of do-file
+
+r(198);
+
+. do "/Users/cameronkeith/Desktop/Econ/Econ 20/Group Project/src/create_dataset.do"
+
+. /*
+> UKA Group Project - Selection on Observables Analysis
+> Econ 20: Measuring the causal impact of UKA exposure
+> 
+> 11/17/2025
+> Professor Duque
+> 
+> by:
+> Josh Wolfson,  josh.s.wolfson.26@dartmouth.edu
+> Cameron Keith, cameron.s.keith.26@dartmouth.edu
+> Annabella Wu,  annabella.wu.26@dartmouth.edu
+> Jesse Dong,    jesse.c.dong.26@dartmouth.edu
+> 
+> createDataset.do:
+> 
+> This stata script loads, cleans, processes, creates, and saves the final dataset 
+> to 'UKA_exposure_dataset.dta'. It also summarizes the treatment and control vars 
+> used in other regressions. 
+> 
+> Note: Please change line 26 to your working directory to run this code. 
+> */
+. 
+. * 0. Setup
+. clear all
+
+. 
+. * Note: Please change this line to your working directory
+. // local basepath "/Users/joshuawolfson/Desktop/Econ20/FinalProj"
+. local basepath "/Users/cameronkeith/Desktop/Econ/Econ 20/Group Project/"
+
+. cd "`basepath'"
+/Users/cameronkeith/Desktop/Econ/Econ 20/Group Project
+
+. 
+. capture log close
