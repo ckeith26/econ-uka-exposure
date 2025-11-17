@@ -1,0 +1,43 @@
+\begin{table}[htbp]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Effect of UKA Exposure on Child BMI: 16 Months}
+\begin{tabular}{l*{5}{c}}
+\toprule
+                    &      Age FE         &      Health         &         SES         &    Grupo FE         &        Full         \\
+                    &\multicolumn{1}{c}{(1)}&\multicolumn{1}{c}{(2)}&\multicolumn{1}{c}{(3)}&\multicolumn{1}{c}{(4)}&\multicolumn{1}{c}{(5)}\\
+                    &\multicolumn{1}{c}{(1)}&\multicolumn{1}{c}{(2)}&\multicolumn{1}{c}{(3)}&\multicolumn{1}{c}{(4)}&\multicolumn{1}{c}{(5)}\\
+\midrule
+treatment\_16        &      -0.361         &      -0.429\sym{*}  &      -0.429\sym{*}  &      -2.566         &      -2.840         \\
+                    &     (0.355)         &     (0.247)         &     (0.247)         &     (1.987)         &     (2.619)         \\
+\addlinespace
+Baseline BMI-for-age z-score (initial panel measurement)&                     &       0.723\sym{***}&       0.723\sym{***}&       0.605\sym{**} &       0.642\sym{**} \\
+                    &                     &     (0.040)         &     (0.040)         &     (0.276)         &     (0.304)         \\
+\addlinespace
+Baseline anemia status (1 = anemic)&                     &      -0.094         &      -0.094         &       0.056         &      -0.322         \\
+                    &                     &     (0.091)         &     (0.091)         &     (0.544)         &     (0.660)         \\
+\addlinespace
+Male child          &                     &      -0.055         &      -0.055         &      -0.029         &      -0.100         \\
+                    &                     &     (0.093)         &     (0.093)         &     (0.427)         &     (0.461)         \\
+\addlinespace
+Weekly calorie intake&                     &                     &                     &                     &                     \\
+                    &                     &                     &                     &                     &                     \\
+\addlinespace
+Weekly iron intake (mg)&                     &                     &                     &                     &                     \\
+                    &                     &                     &                     &                     &                     \\
+\addlinespace
+Weekly household food expenditure&                     &                     &                     &                     &                     \\
+                    &                     &                     &                     &                     &                     \\
+\addlinespace
+Age FE              &         Yes         &         Yes         &         Yes         &         Yes         &         Yes         \\
+\addlinespace
+Grupo FE            &          No         &          No         &          No         &         Yes         &         Yes         \\
+\addlinespace
+Calendar FE         &          No         &          No         &          No         &          No         &         Yes         \\
+\midrule
+Observations        &         324         &         270         &         270         &         270         &         270         \\
+R-squared           &       0.100         &       0.638         &       0.638         &       0.791         &       0.821         \\
+\bottomrule
+\multicolumn{6}{l}{\footnotesize Standard errors in parentheses}\\
+\multicolumn{6}{l}{\footnotesize \sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)}\\
+\end{tabular}
+\end{table}
